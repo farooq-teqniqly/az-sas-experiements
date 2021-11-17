@@ -14,41 +14,11 @@ namespace SasExperimentsTests
     
     public class UnitTest1
     {
-        private readonly string connectionString = "DefaultEndpointsProtocol=https;AccountName=fmduswsto;AccountKey=sS4km2vg9xf6aNkbF/F5BSkSFadHP8kdDlj/eXRJoosjSlcfpa3hTP3iR4Z64PgNYbrMnAVS00ghGrss1+yXLA==;EndpointSuffix=core.windows.net";
-        private readonly string containerName = "test";
-        private readonly string accountName = "fmduswsto";
+        private readonly string containerName = "<<container name>>";
+        private readonly string accountName = "<<storage account name>>";
 
-        private readonly string accountKey =
-            "sS4km2vg9xf6aNkbF/F5BSkSFadHP8kdDlj/eXRJoosjSlcfpa3hTP3iR4Z64PgNYbrMnAVS00ghGrss1+yXLA==";
-
-        private readonly BlobServiceClient blobServiceClient;
-
-        public UnitTest1()
-        {
-            this.blobServiceClient = new BlobServiceClient(this.connectionString);
-        }
-
-        [Fact]
-        public void Can_Create_Container_Sas()
-        {
-            var sasBuilder = new BlobSasBuilder
-            {
-                BlobContainerName = containerName,
-                Resource = "C",
-                ExpiresOn = DateTimeOffset.Now.AddHours(2)
-            };
-
-            sasBuilder.SetPermissions(BlobAccountSasPermissions.Read);
-
-            var sasUri = blobServiceClient
-                .GetBlobContainerClient(containerName)
-                .GenerateSasUri(sasBuilder)
-                .ToString();
-
-            sasUri.Contains(containerName).Should().BeTrue();
-
-        }
-
+        private readonly string accountKey = "<<storage account key>>";
+        
         [Fact]
         public async Task Can_Write_To_Container_Using_Sas()
         {
@@ -64,7 +34,7 @@ namespace SasExperimentsTests
                 ExpiresOn = DateTimeOffset.Now.AddHours(24)
             };
 
-            sasBuilder.SetPermissions(BlobAccountSasPermissions.Read);
+            sasBuilder.SetPermissions(BlobAccountSasPermissions.Write);
 
             var blobSasQueryParameters = sasBuilder.ToSasQueryParameters(sharedKeyCredential);
             
@@ -73,32 +43,39 @@ namespace SasExperimentsTests
                 new AzureSasCredential(blobSasQueryParameters.ToString()));
 
                 await containerClient.UploadBlobAsync(
-                    "1.txt", 
+                    $"{Guid.NewGuid():N}.txt", 
                     new MemoryStream(Encoding.UTF8.GetBytes("foobar")));
         }
 
         [Fact]
-        public void Can_Create_Blob_Sas()
+        public async Task Can_Write_To_Blob_Using_Sas()
         {
-            var blobName = "1.txt";
+            var sharedKeyCredential = new StorageSharedKeyCredential(
+                accountName,
+                accountKey);
+
+            var blobName = $"{Guid.NewGuid():N}.txt";
 
             var sasBuilder = new BlobSasBuilder
             {
                 BlobContainerName = containerName,
                 BlobName = blobName,
                 Resource = "B",
-                ExpiresOn = DateTimeOffset.Now.AddHours(2)
+                StartsOn = DateTimeOffset.Now,
+                ExpiresOn = DateTimeOffset.Now.AddHours(24)
             };
 
-            sasBuilder.SetPermissions(BlobAccountSasPermissions.Read);
+            sasBuilder.SetPermissions(BlobAccountSasPermissions.Write);
 
-            var sasUri = blobServiceClient
-                .GetBlobContainerClient(containerName)
-                .GetBlobClient(blobName)
-                .GenerateSasUri(sasBuilder)
-                .ToString();
+            var blobSasQueryParameters = sasBuilder.ToSasQueryParameters(sharedKeyCredential);
 
-            sasUri.Contains(blobName).Should().BeTrue();
+            var containerClient = new BlobContainerClient(
+                new Uri($"https://{accountName}.blob.core.windows.net/{containerName}"),
+                new AzureSasCredential(blobSasQueryParameters.ToString()));
+
+            await containerClient.UploadBlobAsync(
+                blobName,
+                new MemoryStream(Encoding.UTF8.GetBytes("foobar")));
         }
     }
 }
